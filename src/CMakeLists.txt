@@ -20,7 +20,13 @@ target_link_libraries(Pico_Game_Controller PRIVATE
 
 pico_add_extra_outputs(Pico_Game_Controller)
 
+if(PICO_BOARD STREQUAL "pico2")
+    set(UF2_OUTPUT_NAME "Pico_Game_Controller_Pico2.uf2")
+else()
+    set(UF2_OUTPUT_NAME "Pico_Game_Controller.uf2")
+endif()
+
 add_custom_command(TARGET Pico_Game_Controller
         POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_BINARY_DIR}/src/Pico_Game_Controller.uf2 ${PROJECT_SOURCE_DIR}/build_uf2/Pico_Game_Controller.uf2
+        COMMAND ${CMAKE_COMMAND} -E copy ${PROJECT_BINARY_DIR}/src/Pico_Game_Controller.uf2 ${PROJECT_SOURCE_DIR}/build_uf2/${UF2_OUTPUT_NAME}
 )
