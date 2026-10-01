@@ -330,10 +330,10 @@ void tud_hid_set_report_cb(uint8_t itf, uint8_t report_id,
   // itf 1 = lights-only interface (no report ID, so report_id == 0)
   // buffer[0] is unused (Windows reserves it); actual data starts at buffer[1]
   if (itf == 1 && report_id == 0 && report_type == HID_REPORT_TYPE_OUTPUT &&
-      bufsize > sizeof(lights_report))
+      bufsize >= sizeof(lights_report))
   {
     for (size_t i = 0; i < sizeof(lights_report); i++) {
-      lights_report.raw[i] = buffer[i + 1];
+      lights_report.raw[i] = buffer[i];
     }
     reactive_timeout_timestamp = time_us_64();
   }
