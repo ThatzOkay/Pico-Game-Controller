@@ -4,15 +4,19 @@ if(WIN32)
 else()
     set(USERHOME $ENV{HOME})
 endif()
-set(sdkVersion 2.1.0)
-set(toolchainVersion 13_3_Rel1)
-set(picotoolVersion 2.1.0)
+set(sdkVersion 2.2.0)
+set(toolchainVersion 14_2_Rel1)
+set(picotoolVersion 2.2.0)
 set(picoVscode ${USERHOME}/.pico-sdk/cmake/pico-vscode.cmake)
 if (EXISTS ${picoVscode})
     include(${picoVscode})
 endif()
 # ====================================================================================
-set(PICO_BOARD pico CACHE STRING "Board type")
+if(DEFINED ENV{PICO_BOARD})
+    set(PICO_BOARD $ENV{PICO_BOARD} CACHE STRING "Board type")
+else()
+    set(PICO_BOARD pico CACHE STRING "Board type")
+endif()
 
 cmake_minimum_required(VERSION 3.12)
 
@@ -25,5 +29,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 # Initialize the SDK
 pico_sdk_init()
+
+add_compile_options(-Wall -Wfatal-errors -O3)
 
 add_subdirectory(src)
