@@ -86,20 +86,23 @@ uint8_t const* tud_descriptor_device_cb(void) {
 // HID Report Descriptor
 //--------------------------------------------------------------------+
 
+// Interface 0: joystick (joy mode) or keyboard+mouse (key mode)
 uint8_t const desc_hid_report_joy[] = {
-    GAMECON_REPORT_DESC_JOYSTICK(HID_REPORT_ID(REPORT_ID_JOYSTICK)),
-    GAMECON_REPORT_DESC_LIGHTS(HID_REPORT_ID(REPORT_ID_LIGHTS))};
+    GAMECON_REPORT_DESC_JOYSTICK(HID_REPORT_ID(REPORT_ID_JOYSTICK))};
 
 uint8_t const desc_hid_report_key[] = {
-    GAMECON_REPORT_DESC_LIGHTS(HID_REPORT_ID(REPORT_ID_LIGHTS)),
     GAMECON_REPORT_DESC_NKRO(HID_REPORT_ID(REPORT_ID_KEYBOARD)),
     TUD_HID_REPORT_DESC_MOUSE(HID_REPORT_ID(REPORT_ID_MOUSE))};
+
+// Interface 1: lights only, no report ID so Wine's HidP_SetUsageValue fills bytes 0-12 directly
+uint8_t const desc_hid_report_lights[] = {
+    GAMECON_REPORT_DESC_LIGHTS_NOID};
 
 // Invoked when received GET HID REPORT DESCRIPTOR
 // Application return pointer to descriptor
 // Descriptor contents must exist long enough for transfer to complete
 uint8_t const* tud_hid_descriptor_report_cb(uint8_t itf) {
-  (void)itf;
+  if (itf == 1) return desc_hid_report_lights;
   return (joy_mode_check ? desc_hid_report_joy : desc_hid_report_key);
 }
 
@@ -107,34 +110,31 @@ uint8_t const* tud_hid_descriptor_report_cb(uint8_t itf) {
 // Configuration Descriptor
 //--------------------------------------------------------------------+
 
-enum { ITF_NUM_HID, ITF_NUM_TOTAL };
+enum { ITF_NUM_HID_JOY, ITF_NUM_HID_LIGHTS, ITF_NUM_TOTAL };
 
-#define CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + TUD_HID_DESC_LEN)
+#define CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + TUD_HID_DESC_LEN * 2)
 
-#define EPNUM_HID 0x81
+#define EPNUM_HID_JOY    0x81
+#define EPNUM_HID_LIGHTS 0x82
 
 uint8_t const desc_configuration_joy[] = {
-    // Config number, interface count, string index, total length, attribute,
-    // power in mA
     TUD_CONFIG_DESCRIPTOR(1, ITF_NUM_TOTAL, 0, CONFIG_TOTAL_LEN,
                           TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP, 100),
-
-    // Interface number, string index, protocol, report descriptor len, EP In
-    // address, size & polling interval
-    TUD_HID_DESCRIPTOR(ITF_NUM_HID, 0, HID_ITF_PROTOCOL_NONE,
-                       sizeof(desc_hid_report_joy), EPNUM_HID,
+    TUD_HID_DESCRIPTOR(ITF_NUM_HID_JOY, 0, HID_ITF_PROTOCOL_NONE,
+                       sizeof(desc_hid_report_joy), EPNUM_HID_JOY,
+                       CFG_TUD_HID_EP_BUFSIZE, 1),
+    TUD_HID_DESCRIPTOR(ITF_NUM_HID_LIGHTS, 0, HID_ITF_PROTOCOL_NONE,
+                       sizeof(desc_hid_report_lights), EPNUM_HID_LIGHTS,
                        CFG_TUD_HID_EP_BUFSIZE, 1)};
 
 uint8_t const desc_configuration_key[] = {
-    // Config number, interface count, string index, total length, attribute,
-    // power in mA
     TUD_CONFIG_DESCRIPTOR(1, ITF_NUM_TOTAL, 0, CONFIG_TOTAL_LEN,
                           TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP, 100),
-
-    // Interface number, string index, protocol, report descriptor len, EP In
-    // address, size & polling interval
-    TUD_HID_DESCRIPTOR(ITF_NUM_HID, 0, HID_ITF_PROTOCOL_NONE,
-                       sizeof(desc_hid_report_key), EPNUM_HID,
+    TUD_HID_DESCRIPTOR(ITF_NUM_HID_JOY, 0, HID_ITF_PROTOCOL_NONE,
+                       sizeof(desc_hid_report_key), EPNUM_HID_JOY,
+                       CFG_TUD_HID_EP_BUFSIZE, 1),
+    TUD_HID_DESCRIPTOR(ITF_NUM_HID_LIGHTS, 0, HID_ITF_PROTOCOL_NONE,
+                       sizeof(desc_hid_report_lights), EPNUM_HID_LIGHTS,
                        CFG_TUD_HID_EP_BUFSIZE, 1)};
 
 // Invoked when received GET CONFIGURATION DESCRIPTOR
@@ -162,12 +162,12 @@ char const* string_desc_arr[] = {
     "FX-L",
     "FX-R",
     "Start",
-    "Left R",
-    "Left G",
-    "Left B",
-    "Right R",
-    "Right G",
-    "Right B",
+    "Wing Left R",
+    "Wing Left G",
+    "Wing Left B",
+    "Wing Right R",
+    "Wing Right G",
+    "Wing Right B",
 };
 
 static uint16_t _desc_str[64];

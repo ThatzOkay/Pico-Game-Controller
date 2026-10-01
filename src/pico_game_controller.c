@@ -21,10 +21,10 @@
 #include "usb_descriptors.h"
 // clang-format off
 #include "debounce/debounce_include.h"
-#include "rgb/rgb_include.h"
+#include "led_strip.h"
 // clang-format on
 
-PIO pio, pio_1;
+PIO pio;
 uint32_t enc_val[ENC_GPIO_SIZE];
 uint32_t prev_enc_val[ENC_GPIO_SIZE];
 int cur_enc_val[ENC_GPIO_SIZE];
@@ -42,10 +42,12 @@ void (*loop_mode)();
 void (*debounce_mode)();
 bool joy_mode_check = true;
 
-union {
-  struct {
+union
+{
+  struct
+  {
     uint8_t buttons[LED_GPIO_SIZE];
-    RGB_t rgb[WS2812B_LED_ZONES];
+    color rgb[WS2812B_LED_ZONES];
   } lights;
   uint8_t raw[LED_GPIO_SIZE + WS2812B_LED_ZONES * 3];
 } lights_report;
@@ -54,51 +56,47 @@ union {
  * WS2812B Lighting
  * @param counter Current number of WS2812B cycles
  **/
-void ws2812b_update(uint32_t counter) {
-  if (time_us_64() - reactive_timeout_timestamp >= REACTIVE_TIMEOUT_MAX) {
-    ws2812b_mode(counter);
-  } else {
-    for (int i = 0; i < WS2812B_LED_ZONES; i++) {
-      for (int j = 0; j < WS2812B_LEDS_PER_ZONE; j++) {
-        put_pixel(urgb_u32(lights_report.lights.rgb[i].r,
-                           lights_report.lights.rgb[i].g,
-                           lights_report.lights.rgb[i].b));
+void ws2812b_update(uint32_t counter)
+{
+  if (time_us_64() - reactive_timeout_timestamp >= REACTIVE_TIMEOUT_MAX)
+  {
+    if (ws2812b_mode) ws2812b_mode(counter);
+  }
+  else
+  {
+    for (int i = 0; i < WS2812B_LED_ZONES; i++)
+    {
+      for (int j = 0; j < WS2812B_LEDS_PER_ZONE; j++)
+      {
+        set_pixel(i * WS2812B_LEDS_PER_ZONE + j, (color){lights_report.lights.rgb[i].r,
+                                                           lights_report.lights.rgb[i].g,
+                                                           lights_report.lights.rgb[i].b});
       }
     }
+    fill_strip();
   }
 }
 
 /**
  * HID/Reactive Lights
  **/
-void update_lights() {
-  for (int i = 0; i < LED_GPIO_SIZE - 1; i++) {
-    if (time_us_64() - reactive_timeout_timestamp >= REACTIVE_TIMEOUT_MAX) {
-      if (!gpio_get(SW_GPIO[i])) {
-        gpio_put(LED_GPIO[i], 1);
-      } else {
-        gpio_put(LED_GPIO[i], 0);
-      }
-    } else {
-      if (lights_report.lights.buttons[i] == 0) {
-        gpio_put(LED_GPIO[i], 0);
-      } else {
-        gpio_put(LED_GPIO[i], 1);
-      }
+void update_lights()
+{
+  bool all_off = true;
+  for (int i = 0; i < LED_GPIO_SIZE; i++)
+  {
+    /* start button (last LED) maps to SW_GPIO[LED_GPIO_SIZE + 1] */
+    int sw_idx = (i < LED_GPIO_SIZE - 1) ? i : (LED_GPIO_SIZE + 1);
+    if (time_us_64() - reactive_timeout_timestamp >= REACTIVE_TIMEOUT_MAX)
+    {
+      bool pressed = !gpio_get(SW_GPIO[sw_idx]);
+      gpio_put(LED_GPIO[i], pressed);
     }
-    /* start button sw_val index is offset by two with respect to LED_GPIO */
-    if (time_us_64() - reactive_timeout_timestamp >= REACTIVE_TIMEOUT_MAX) {
-      if (!gpio_get(SW_GPIO[LED_GPIO_SIZE + 1])) {
-        gpio_put(LED_GPIO[LED_GPIO_SIZE - 1], 1);
-      } else {
-        gpio_put(LED_GPIO[LED_GPIO_SIZE - 1], 0);
-      }
-    } else {
-      if (lights_report.lights.buttons[LED_GPIO_SIZE - 1] == 0) {
-        gpio_put(LED_GPIO[LED_GPIO_SIZE - 1], 0);
-      } else {
-        gpio_put(LED_GPIO[LED_GPIO_SIZE - 1], 1);
-      }
+    else
+    {
+      bool on = lights_report.lights.buttons[i] != 0;
+      gpio_put(LED_GPIO[i], on);
+      if (on) all_off = false;
     }
   }
 }
@@ -248,12 +246,6 @@ void init() {
 
   reactive_timeout_timestamp = time_us_64();
 
-  // Set up WS2812B
-  pio_1 = pio1;
-  uint offset2 = pio_add_program(pio_1, &ws2812_program);
-  ws2812_program_init(pio_1, ENC_GPIO_SIZE, offset2, WS2812B_GPIO, 800000,
-                      false);
-
   // Setup Button GPIO
   for (int i = 0; i < SW_GPIO_SIZE; i++) {
     sw_prev_raw_val[i] = false;
@@ -283,12 +275,8 @@ void init() {
     joy_mode_check = true;
   }
 
-  // RGB Mode Switching
-  if (!gpio_get(SW_GPIO[1])) {
-    ws2812b_mode = &turbocharger_color_cycle;
-  } else {
-    ws2812b_mode = &ws2812b_color_cycle;
-  }
+  // LED effects handled by PicoLed; no active effect by default
+  ws2812b_mode = NULL;
 
   // Debouncing Mode
   debounce_mode = &debounce_eager;
@@ -339,13 +327,13 @@ uint16_t tud_hid_get_report_cb(uint8_t itf, uint8_t report_id,
 void tud_hid_set_report_cb(uint8_t itf, uint8_t report_id,
                            hid_report_type_t report_type, uint8_t const* buffer,
                            uint16_t bufsize) {
-  (void)itf;
-  if (report_id == 2 && report_type == HID_REPORT_TYPE_OUTPUT &&
-      bufsize >= sizeof(lights_report))  // light data
+  // itf 1 = lights-only interface (no report ID, so report_id == 0)
+  // buffer[0] is unused (Windows reserves it); actual data starts at buffer[1]
+  if (itf == 1 && report_id == 0 && report_type == HID_REPORT_TYPE_OUTPUT &&
+      bufsize > sizeof(lights_report))
   {
-    size_t i = 0;
-    for (i; i < sizeof(lights_report); i++) {
-      lights_report.raw[i] = buffer[i];
+    for (size_t i = 0; i < sizeof(lights_report); i++) {
+      lights_report.raw[i] = buffer[i + 1];
     }
     reactive_timeout_timestamp = time_us_64();
   }

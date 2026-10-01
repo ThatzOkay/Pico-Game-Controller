@@ -27,9 +27,13 @@ project(Pico_Game_Controller C CXX ASM)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
+set(PICO_CXX_ENABLE_EXCEPTIONS 1)
+
 # Initialize the SDK
 pico_sdk_init()
 
 add_compile_options(-Wall -Wfatal-errors -O3)
+
+add_subdirectory(pico_led)
 
 add_subdirectory(src)
